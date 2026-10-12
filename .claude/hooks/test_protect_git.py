@@ -144,6 +144,201 @@ class ClassificationTests(unittest.TestCase):
         self.assertIn("cannot safely determine", protect_git.evaluate("Bash", "git push $X"))
 
 
+CHECKOUT_RESTORE_BLOCKED = [
+    "git checkout -- .", "git checkout -- src/main/java/Example.java", "git checkout .",
+    "git checkout -f main", "git checkout --force main",
+    "git restore .", "git restore src/main/java/Example.java", "git restore --worktree .",
+    "git restore --source=HEAD .", "git restore --staged --worktree .",
+    # option order, combined/short forms, abbreviations, paths after a revision
+    "git checkout main -- src/Example.java", "git checkout HEAD -- .", "git checkout ./src", "git checkout -fb x",
+    "git checkout --forc main", "git checkout -b x -f",
+    "git restore -S -W .", "git restore -SW .", "git restore --worktree --staged .", "git restore --wor .",
+    "git restore --source HEAD~1 --staged --worktree src/Example.java", "git -C . restore .",
+    "git status && git checkout -- .", "bash -c 'git restore .'",
+    # patch mode and conflict-side checkout
+    "git checkout -p", "git checkout --patch", "git checkout -p main", "git checkout --pat", "git checkout -pq",
+    "git checkout --ours -- file", "git checkout --theirs -- file", "git checkout --ours file",
+    "git checkout --theirs file", "git checkout --our file", "git checkout --the file",
+    "git checkout --patch HEAD -- src/Example.java", "git -C . checkout -p",
+    # fail closed on unresolved arguments
+    "git checkout $TARGET", "git restore $FILES",
+]
+CHECKOUT_RESTORE_ALLOWED = [
+    "git checkout -b feature/customer-booking", "git checkout main", "git checkout feature/customer-booking",
+    "git checkout -b x main", "git checkout -B x", "git checkout --detach main",
+    "git checkout --orphan new-root", "git checkout --track origin/feature", "git checkout -q main",
+    "git restore --staged src/main/java/Example.java", "git restore -S src/Example.java",
+    "git restore --staged .", "git restore --source=HEAD --staged .",
+    "git status", "git diff",
+    'echo "git checkout -- ."', "git commit -m 'never run git restore .'", "grep 'git checkout -f' README.md",
+]
+
+
+class CheckoutRestoreTests(unittest.TestCase):
+    def test_destructive_checkout_restore_blocked(self):
+        for tool in ("Bash", "PowerShell"):
+            for cmd in CHECKOUT_RESTORE_BLOCKED:
+                with self.subTest(tool=tool, cmd=cmd):
+                    self.assertIsNotNone(protect_git.evaluate(tool, cmd), "should be blocked")
+
+    def test_safe_checkout_restore_allowed(self):
+        for tool in ("Bash", "PowerShell"):
+            for cmd in CHECKOUT_RESTORE_ALLOWED:
+                with self.subTest(tool=tool, cmd=cmd):
+                    self.assertIsNone(protect_git.evaluate(tool, cmd), "should be allowed")
+
+    def test_reason_is_informative(self):
+        self.assertIn("git checkout", protect_git.evaluate("Bash", "git checkout -- ."))
+        self.assertIn("git restore", protect_git.evaluate("Bash", "git restore ."))
+
+    def test_exit_codes_via_simulated_payload(self):
+        for tool in ("Bash", "PowerShell"):
+            for cmd in ("git checkout -- .", "git restore --worktree ."):
+                with self.subTest(tool=tool, cmd=cmd):
+                    r = run_hook(tool, cmd)
+                    self.assertEqual(r.returncode, 2, r.stderr)
+                    self.assertIn("BLOCKED by protect-git hook", r.stderr)
+            for cmd in ("git checkout -b feature/customer-booking", "git restore --staged src/Example.java"):
+                with self.subTest(tool=tool, cmd=cmd):
+                    r = run_hook(tool, cmd)
+                    self.assertEqual((r.returncode, r.stdout, r.stderr), (0, "", ""))
+
+
+DELETE_BLOCKED = [
+    "rm -rf src/", "rm -r src/", "rm -rf .git", "rm -rf .claude", "rm -rf .", "rm -rf ..",
+    "rm -rf src/../.git", "rm -rf ./target/../src", "rm -rf src target",
+    "Remove-Item . -Recurse -Force",
+    "Remove-Item $path -Recurse -Force", "rmdir /s /q src",
+    # encompassing / protected content, other spellings
+    "rm -rf /", "rm -fr src", "rm -R src", "rm --recursive --force src", "rm -rf -- src", "rm -rf src/main/java",
+    "rm pom.xml", "rm mvnw", "rm mvnw.cmd", "rm docker-compose.yml", "rm src/main/resources/application.yaml",
+    "rm -rf .git/hooks", "rm -rf ./.claude/hooks", "rm -rf ../booking-api", "rm -rf features target/../.git",
+    "rm -rf mytarget", "rm -rf not-target", "rm -rf target-backup", "rm -rf /tmp/target", "rm -rf ../target",
+    "rm -rf features", "rm -rf ~", "rm -rf ~/x",
+    "rm -rf target/*", "rm -rf $TARGET", "rm -rf $(pwd)", "rm -rf *", "rm -rf $HOME/target",
+    "rm -rf target/../.", "sudo rm -rf src", "xargs rm -rf", "find . -exec rm -rf {} +", "command rm -rf .git",
+    "echo hi && rm -rf src", "bash -c 'rm -rf src'", "cd .. && rm -rf target", "cd src; rm -rf x",
+    "ri -r src", "Remove-Item -Path src -Recurse", "Remove-Item -LiteralPath .git -Recurse -Force",
+    "Remove-Item -Rec src", "Remove-Item src,target -Recurse", "Remove-Item -Path:src -Recurse",
+    "del /s src", "rd /s /q .git", "rmdir /s /q .claude", "rmdir /s /q features",
+    "cmd /c rmdir /s /q src", 'cmd /c "rd /s /q .git"', "rmdir /s /q ..",
+]
+# PowerShell only: in Bash a backslash is an escape character, so these paths mean something else.
+DELETE_POWERSHELL_ONLY_BLOCKED = [
+    r"Remove-Item .\src -Recurse -Force", r"Remove-Item .\.git -Recurse -Force",
+    r"Remove-Item .\.claude -Recurse -Force", r"Remove-Item .\featu* -Recurse",
+    r"Remove-Item C:\ -Recurse -Force", r"Remove-Item src\main\java\X.java",
+]
+DELETE_POWERSHELL_ONLY_ALLOWED = [r"Remove-Item .\target -Recurse -Force"]
+DELETE_ALLOWED = [
+    "rm -rf target", "rm -rf target/", "rm -rf ./target", "rm -r target", "rm -rf target/classes",
+    "rm -rf -- target", "rm -rf ./target/./classes", "rm -rf features/../target",
+    "Remove-Item target -Recurse", "Remove-Item -Path target -Recurse -Force",
+    "rmdir /s /q target", "rd /s /q target", "cmd /c rmdir /s /q target",
+    "rm notes.tmp", "rm -f build.log", "rm /tmp/scratch.txt", "rm features/draft.tmp",
+    "Remove-Item scratch.tmp", "Remove-Item scratch.tmp -Force", "del scratch.tmp",
+    "rm -rf target && ./mvnw package",
+    # quoted data and harmless commands
+    'echo "rm -rf src"', "echo 'Remove-Item . -Recurse'", "git commit -m 'never run rm -rf .git'",
+    "grep 'rm -rf' README.md", "ls src", "cat pom.xml", "rm", "mv notes.tmp old.tmp", r".\mvnw.cmd clean",
+]
+
+
+class DeletionTests(unittest.TestCase):
+    def test_powershell_backslash_paths(self):
+        for cmd in DELETE_POWERSHELL_ONLY_BLOCKED:
+            with self.subTest(cmd=cmd):
+                self.assertIsNotNone(protect_git.evaluate("PowerShell", cmd), "should be blocked")
+        for cmd in DELETE_POWERSHELL_ONLY_ALLOWED:
+            with self.subTest(cmd=cmd):
+                self.assertIsNone(protect_git.evaluate("PowerShell", cmd), "should be allowed")
+
+    def test_protected_or_ambiguous_deletion_blocked(self):
+        for tool in ("Bash", "PowerShell"):
+            for cmd in DELETE_BLOCKED:
+                with self.subTest(tool=tool, cmd=cmd):
+                    self.assertIsNotNone(protect_git.evaluate(tool, cmd), "should be blocked")
+
+    def test_safe_cleanup_allowed(self):
+        for tool in ("Bash", "PowerShell"):
+            for cmd in DELETE_ALLOWED:
+                with self.subTest(tool=tool, cmd=cmd):
+                    self.assertIsNone(protect_git.evaluate(tool, cmd), "should be allowed")
+
+    def test_reason_is_informative(self):
+        self.assertIn("protected", protect_git.evaluate("Bash", "rm -rf src"))
+        self.assertIn("target", protect_git.evaluate("Bash", "rm -rf features"))
+        self.assertIn("cannot safely determine", protect_git.evaluate("Bash", "rm -rf $X"))
+
+    def test_exit_codes_via_simulated_payload(self):
+        for tool in ("Bash", "PowerShell"):
+            for cmd in ("rm -rf src/", "rm -rf .git", "Remove-Item $path -Recurse -Force", "rmdir /s /q src"):
+                with self.subTest(tool=tool, cmd=cmd):
+                    r = run_hook(tool, cmd)
+                    self.assertEqual(r.returncode, 2, r.stderr)
+                    self.assertIn("BLOCKED by protect-git hook", r.stderr)
+            for cmd in ("rm -rf target", "Remove-Item target -Recurse -Force", "rm scratch.tmp"):
+                with self.subTest(tool=tool, cmd=cmd):
+                    r = run_hook(tool, cmd)
+                    self.assertEqual((r.returncode, r.stdout, r.stderr), (0, "", ""))
+
+
+DELETE_FLAG_NOT_RECURSIVE = [  # not a recursive request; the unprotected target is a single path
+    "rm -Force features", "rm -Force scratch.tmp", "rm -f features", "rm -fv features",
+    "rm -- -rf features",  # after '--' both words are file names
+    "rm -rF features",  # 'F' is not an rm option, so rm rejects the whole command and deletes nothing
+]
+DELETE_FLAG_RECURSIVE = [  # valid recursive spellings, still blocked on an unprotected non-target directory
+    "rm -r features", "rm -R features", "rm -rf features", "rm -fr features", "rm -fR features",
+    "rm -rv features", "rm -vr features", "rm -Rf features", "rm --recursive features", "rm --rec features",
+    "rm -Recurse features", "rm -recurse features", "rm -rec features", "rm -Recurse -Force features",
+    "rm -Force -Recurse features", "rm -f -r features",
+]
+DELETE_NEWLY_PROTECTED_BLOCKED = [
+    "rm -rf .mvn", "rm -r .mvn/", "rm -rf .mvn/wrapper", "rm .mvn/wrapper/maven-wrapper.properties",
+    "rm -rf ./.mvn", "rm -rf features/../.mvn", "rm -rf target/../.mvn",
+    "rm CLAUDE.md", "rm README.md", "rm -f README.md", "rm -f CLAUDE.md", "rm -rf CLAUDE.md", "rm -rf README.md",
+    "rm ./README.md", "rm features/../README.md", "rm -- CLAUDE.md",
+    "Remove-Item README.md", "Remove-Item CLAUDE.md -Force", "Remove-Item .mvn -Recurse -Force",
+    "Remove-Item -Path .mvn/wrapper -Recurse", "Remove-Item -LiteralPath README.md",
+    "del CLAUDE.md", "del README.md", "rmdir /s /q .mvn", "rd /s /q .mvn", "cmd /c rmdir /s /q .mvn",
+    "sudo rm CLAUDE.md", "bash -c 'rm -rf .mvn'", "echo hi && rm README.md",
+]
+DELETE_NEWLY_PROTECTED_ALLOWED = [  # similarly named, but not the protected paths
+    "rm features/README.md", "rm CLAUDE.md.bak", "rm README.md.tmp", "rm target/README.md", "rm -rf target/.mvn",
+    "rm mvn.log", "cat README.md", "grep -n x CLAUDE.md", "echo 'rm README.md'",
+]
+
+
+class DeletionRefinementTests(unittest.TestCase):
+    def check(self, commands, expect_blocked):
+        for tool in ("Bash", "PowerShell"):
+            for cmd in commands:
+                with self.subTest(tool=tool, cmd=cmd):
+                    reason = protect_git.evaluate(tool, cmd)
+                    if expect_blocked:
+                        self.assertIsNotNone(reason, "should be blocked")
+                    else:
+                        self.assertIsNone(reason, "should be allowed")
+
+    def test_non_recursive_flags_not_misread_as_recursive(self):
+        self.check(DELETE_FLAG_NOT_RECURSIVE, expect_blocked=False)
+
+    def test_valid_recursive_flags_still_detected(self):
+        self.check(DELETE_FLAG_RECURSIVE, expect_blocked=True)
+
+    def test_mvn_claude_md_and_readme_protected(self):
+        self.check(DELETE_NEWLY_PROTECTED_BLOCKED, expect_blocked=True)
+
+    def test_similarly_named_paths_not_protected(self):
+        self.check(DELETE_NEWLY_PROTECTED_ALLOWED, expect_blocked=False)
+
+    def test_powershell_backslash_paths(self):
+        for cmd in (r"Remove-Item .\.mvn -Recurse -Force", r"Remove-Item .\README.md", r"del .\CLAUDE.md"):
+            with self.subTest(cmd=cmd):
+                self.assertIsNotNone(protect_git.evaluate("PowerShell", cmd), "should be blocked")
+
+
 class HookProcessTests(unittest.TestCase):
     """End to end: simulated hook JSON on stdin, real exit codes and stderr."""
 
