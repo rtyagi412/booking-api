@@ -6,11 +6,16 @@ Reads the hook event JSON on stdin. Exit 0 = allow (no opinion), exit 2 = block
 blocks (fail closed). Standard library only.
 
 Blocked: git push --force/-f/--force-with-lease/+refspec/--mirror/--delete/--prune/:ref,
-         git reset --hard/--merge, git clean (unless dry-run), git branch -D / -d -f.
+         git reset --hard/--merge, git clean (unless dry-run), git branch -D / -d -f,
+         git checkout -f/-p/--ours/--theirs, `--`/`.` pathspecs, git restore (unless --staged only).
+Also blocked: file deletion (rm, Remove-Item, del, rd, rmdir) of or around protected paths (repository
+root and parents, .git, .claude, src, root build files), and any recursive deletion that does not
+resolve inside the repository-root target/ directory. Dynamic or glob targets fail closed.
 Quoted text such as `echo "git reset --hard"` is data and is not blocked.
 """
 import base64
 import json
+import os
 import re
 import sys
 from dataclasses import dataclass, field
@@ -28,7 +33,7 @@ WRAPPERS = {"env", "sudo", "doas", "nohup", "nice", "ionice", "timeout", "comman
             "stdbuf", "setsid", "watch", "wsl", "busybox"}
 START_PROCESS = {"start-process", "saps"}
 START_PROCESS_PARAMS = {"-argumentlist", "-args", "-wait", "-nonewwindow", "-passthru"}
-RISKY_SUBCOMMANDS = {"push", "reset", "clean", "branch"}
+RISKY_SUBCOMMANDS = {"push", "reset", "clean", "branch", "checkout", "restore"}
 RISKY_WHEN_UNRESOLVED = RISKY_SUBCOMMANDS | {"--hard", "--force", "-f", "-d"}
 
 GIT_GLOBAL_WITH_VALUE = {"-C", "-c", "--git-dir", "--work-tree", "--namespace", "--super-prefix",
@@ -39,6 +44,20 @@ GIT_GLOBAL_FLAGS = {"-p", "-P", "--paginate", "--no-pager", "--bare", "--no-repl
                     "--literal-pathspecs", "--glob-pathspecs", "--noglob-pathspecs",
                     "--icase-pathspecs", "--no-optional-locks", "--no-lazy-fetch",
                     "--exec-path", "--html-path", "--man-path", "--info-path", "--no-advice"}
+
+REPO_ROOT = os.path.realpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
+CD_COMMANDS = {"cd", "chdir", "pushd", "popd", "set-location", "sl"}
+POSIX_DELETERS = {"rm"}
+DELETERS = POSIX_DELETERS | {"remove-item", "ri", "del", "erase", "rd", "rmdir"}
+PS_VALUE_PARAMS = ("path", "literalpath", "include", "exclude", "filter", "stream", "credential")
+PS_PARAMS = PS_VALUE_PARAMS + ("recurse", "force", "confirm", "whatif", "usetransaction")
+CMD_SWITCH = re.compile(r"^/[A-Za-z?](:.*)?$")
+DISPOSABLE_DIRS = ("target",)  # exact allowlist of disposable directories, relative to the repo root
+PROTECTED_SUBTREES = (".git", ".claude", ".mvn", "src")
+PROTECTED_FILES = ("pom.xml", "mvnw", "mvnw.cmd", "application.yaml", "docker-compose.yml",
+                   "CLAUDE.md", "README.md")
+RM_SHORT_OPTIONS = frozenset("dfiIPrRvWx")  # GNU/BSD rm; a cluster with any other letter makes rm reject the command
+cwd_state = {"known": True}  # False once a cd-like command may have moved the working directory
 
 
 class Unsafe(Exception):
@@ -329,6 +348,11 @@ def check_segment(seg, depth):
     name = base_name(cmd.text)
     if name == "git":
         return check_git(rest)
+    if name in CD_COMMANDS:
+        cwd_state["known"] = False
+        return None
+    if name in DELETERS:
+        return check_delete(name, rest)
     if name in SHELLS:
         if seg.stdin_script:
             raise Unsafe(f"script fed to '{name}' through stdin/heredoc cannot be analysed")
@@ -343,6 +367,9 @@ def check_segment(seg, depth):
 def check_wrapper(name, rest, depth):
     for j, w in enumerate(rest):
         target = base_name(w.text)
+        if target in DELETERS:
+            stdin_targets = [Word("<stdin>", True)] if name == "xargs" else []  # targets cannot be seen
+            return check_delete(target, rest[j + 1:] + stdin_targets)
         if target == "git":
             args = rest[j + 1:]
             if name in START_PROCESS:
@@ -449,7 +476,7 @@ def check_git(args):
         raise Unsafe(f"arguments to 'git {sub_name}' use variables, substitutions or globs, "
                      "so destructive flags cannot be ruled out")
     return {"push": check_push, "reset": check_reset, "clean": check_clean,
-            "branch": check_branch}[sub_name](rest)
+            "branch": check_branch, "checkout": check_checkout, "restore": check_restore}[sub_name](rest)
 
 
 def check_push(args):
@@ -487,9 +514,120 @@ def check_branch(args):
     return None
 
 
+def check_checkout(args):
+    if "f" in short_flags(args) or long_flag(args, "--force"):
+        return "git checkout -f/--force discards local changes"
+    if "p" in short_flags(args) or any(long_flag(args, f, min_len=4) for f in ("--patch", "--ours", "--theirs")):
+        return "git checkout -p/--patch/--ours/--theirs discards or overwrites working-tree changes"
+    for a in args:
+        if a.text == "--" or a.text in (".", "..") or a.text.startswith(("./", "../", ".\\", "..\\")):
+            return "git checkout with a path (-- <path> or '.') overwrites working-tree files"
+    return None
+
+
+def check_restore(args):
+    staged = "S" in short_flags(args) or long_flag(args, "--staged", min_len=4)
+    worktree = "W" in short_flags(args) or long_flag(args, "--worktree")
+    if staged and not worktree:
+        return None
+    return "git restore overwrites working-tree files; only 'git restore --staged' is allowed"
+
+
+def is_recursive_short_option(letters):
+    """`-rf`, `-fR`: a valid rm option cluster containing r/R. `-Recurse`/`-rec` is PowerShell's abbreviable
+    parameter. Clusters with other letters such as `-Force` are not recursive requests (rm would reject them)."""
+    return (set(letters) <= RM_SHORT_OPTIONS and bool(set(letters) & set("rR")))         or "recurse".startswith(letters.lower())
+
+
+def parse_posix_delete(args):
+    recursive, paths, options_done = False, [], False
+    for a in args:
+        t = a.text
+        if options_done or not t.startswith("-") or t == "-":
+            paths.append(t)
+        elif t == "--":
+            options_done = True
+        elif t.startswith("--"):
+            name = t.split("=", 1)[0]
+            recursive = recursive or (len(name) >= 3 and "--recursive".startswith(name))
+        else:
+            recursive = recursive or is_recursive_short_option(t[1:])
+    return recursive, paths
+
+
+def parse_ps_delete(args):
+    """Remove-Item/del/rd/rmdir: PowerShell parameters (prefix-abbreviable) and cmd.exe /s switches."""
+    recursive, paths, k = False, [], 0
+    while k < len(args):
+        t = args[k].text
+        k += 1
+        if CMD_SWITCH.match(t):
+            recursive = recursive or t.lower().startswith("/s")
+        elif t.startswith("-") and len(t) > 1:
+            name, colon, inline = t.lstrip("-").partition(":")
+            cands = [c for c in PS_PARAMS if name and c.startswith(name.lower())]
+            recursive = recursive or "recurse" in cands
+            takes_path = bool(cands) and all(c in ("path", "literalpath") for c in cands)
+            if colon:
+                paths.extend(inline.split(",") if takes_path else [])
+            elif cands and all(c in PS_VALUE_PARAMS for c in cands) and k < len(args):
+                if takes_path:
+                    paths.extend(args[k].text.split(","))
+                k += 1
+        else:
+            paths.extend(t.split(","))
+    return recursive, paths
+
+
+def resolve_target(text):
+    if text.startswith("~"):
+        raise Unsafe(f"deletion target '{text}' depends on the home directory")
+    text = text.replace("\\", "/")
+    drive = re.match(r"^/([A-Za-z])(/.*)?$", text)
+    if os.name == "nt" and drive:  # Git Bash style /c/Users/...
+        text = f"{drive.group(1)}:{drive.group(2) or '/'}"
+    if not os.path.isabs(text) and not cwd_state["known"]:
+        raise Unsafe(f"relative deletion target '{text}' follows a directory change, so it cannot be resolved")
+    return os.path.normcase(os.path.realpath(os.path.join(REPO_ROOT, text)))
+
+
+def within(path, parent):
+    return path == parent or path.startswith(parent.rstrip(os.sep) + os.sep)
+
+
+def protected_hit(target):
+    """Return the protected path that target is, contains, or sits inside, else None."""
+    root = os.path.normcase(REPO_ROOT)
+    if within(root, target):
+        return "the repository root"
+    for name in PROTECTED_SUBTREES + PROTECTED_FILES:
+        path = os.path.normcase(os.path.join(REPO_ROOT, name))
+        if within(target, path) or within(path, target):
+            return name
+    return None
+
+
+def check_delete(name, args):
+    if any(a.dynamic for a in args):
+        raise Unsafe(f"deletion arguments of '{name}' use variables, substitutions or globs, "
+                     "so the targets cannot be resolved")
+    recursive, paths = (parse_posix_delete if name in POSIX_DELETERS else parse_ps_delete)(args)
+    allowed = [os.path.normcase(os.path.join(REPO_ROOT, d)) for d in DISPOSABLE_DIRS]
+    for text in paths:
+        target = resolve_target(text)
+        hit = protected_hit(target)
+        if hit:
+            return f"deleting '{text}' would remove or modify protected path {hit}"
+        if recursive and not any(within(target, a) for a in allowed):
+            return (f"recursive deletion of '{text}' is not allowed; only the repository-root "
+                    f"{'/'.join(DISPOSABLE_DIRS)}/ directory may be deleted recursively")
+    return None
+
+
 def evaluate(tool_name, command):
     """Return a block reason for a proposed command, or None to allow it."""
     shell = SHELL_TOOLS[tool_name]
+    cwd_state["known"] = True
     try:
         return check_command(command, shell)
     except Unsafe as exc:
