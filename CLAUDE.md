@@ -75,4 +75,8 @@ Run from the repository root.
 Docker (same in both shells; Docker Desktop must be running):
 - Start DB (needs `.env`, see `.env.example`): `docker compose up -d`
 - Status: `docker compose ps`
-- Stop DB (keeps data): `docker compose down`
+- Full stack (backend image + DB): `docker compose --profile app up -d --build`; logs: `docker compose logs -f backend`
+- Stop (keeps data): `docker compose --profile app down`. Never add `-v` without asking (deletes the DB volume).
+- Plain `docker compose up -d` starts only PostgreSQL. The backend container gets `DB_HOST=postgres`, `DB_PORT=5432` and `ddl-auto=update` from `docker-compose.yml` (local Compose only); it is published on `127.0.0.1:8080`.
+- After editing `docker-compose.yml` or `.env`, run `docker compose --profile app up -d` (recreates only changed services); `restart` does not apply config changes. Code or Dockerfile changes need `up -d --build backend`. PostgreSQL is published on `127.0.0.1:5436` only.
+- Health: only `GET /actuator/health`, `/actuator/health/liveness` (no DB) and `/actuator/health/readiness` (includes DB) are public, status only; all other Actuator paths stay protected. The backend container healthcheck uses readiness. Read-only smoke test: `.\scripts\smoke-test.ps1` (exit code 0 = pass).

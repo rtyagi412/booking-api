@@ -1,0 +1,16 @@
+.git
+.github
+.idea
+.claude
+.vscode
+target
+HELP.md
+.env
+.env.*
+*.pem
+*.key
+features
+*.md
+docker-compose.yml
+Dockerfile
+.dockerignore

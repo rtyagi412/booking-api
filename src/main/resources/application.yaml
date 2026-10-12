@@ -4,6 +4,22 @@ logging:
     # failing row) at WARN. Keep personal data and password hashes out of the logs.
     org.hibernate.orm.jdbc.error: ERROR
 
+# Health only, no details. Liveness is process state; readiness also checks the database.
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      show-details: never
+      show-components: never
+      group:
+        readiness:
+          include: readinessState,db
+
 spring:
   application:
     name: booking-api
@@ -14,6 +30,9 @@ spring:
     username: ${DB_USERNAME}
     password: ${DB_PASSWORD}
     driver-class-name: org.postgresql.Driver
+    hikari:
+      # Fail fast when the DB is down (default 30s) so readiness answers 503 within the probe timeout.
+      connection-timeout: 2000
   jpa:
     hibernate:
       ddl-auto: validate

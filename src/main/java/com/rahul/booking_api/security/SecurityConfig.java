@@ -22,6 +22,8 @@ public class SecurityConfig {
 				.authorizeHttpRequests(auth -> auth
 						.dispatcherTypeMatchers(DispatcherType.ERROR).permitAll()
 						.requestMatchers(HttpMethod.POST, "/api/customers").permitAll()
+						.requestMatchers(HttpMethod.GET, "/actuator/health", "/actuator/health/liveness",
+								"/actuator/health/readiness").permitAll()
 						.anyRequest().authenticated())
 				.build();
 	}
