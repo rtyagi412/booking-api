@@ -33,3 +33,10 @@ build/
 .vscode/
 
 __pycache__/
+
+### Environment and secrets ###
+.env
+.env.*
+!.env.example
+*.pem
+*.key

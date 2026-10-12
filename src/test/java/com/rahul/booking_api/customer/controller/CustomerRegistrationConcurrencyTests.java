@@ -1,5 +1,6 @@
 package com.rahul.booking_api.customer.controller;
 
+import org.springframework.test.context.ActiveProfiles;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.fail;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -33,6 +34,7 @@ import org.springframework.test.web.servlet.MockMvc;
  * T15. All waits are bounded; the executor is always shut down and must terminate.
  * 8 workers stay below the default Hikari pool size of 10.
  */
+@ActiveProfiles("test")
 @SpringBootTest
 @AutoConfigureMockMvc
 @Import(TestcontainersConfiguration.class)

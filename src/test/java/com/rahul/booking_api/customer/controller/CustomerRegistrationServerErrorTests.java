@@ -1,5 +1,6 @@
 package com.rahul.booking_api.customer.controller;
 
+import org.springframework.test.context.ActiveProfiles;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doReturn;
@@ -28,6 +29,7 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
  * ERROR permit and Boot's default error rendering are exercised together (MockMvc does not do this).
  * The forced failure lives here, isolated from the normal controller tests.
  */
+@ActiveProfiles("test")
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @Import(TestcontainersConfiguration.class)
 class CustomerRegistrationServerErrorTests {

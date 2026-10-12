@@ -1,5 +1,6 @@
 package com.rahul.booking_api.customer.controller;
 
+import org.springframework.test.context.ActiveProfiles;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.jayway.jsonpath.JsonPath;
@@ -26,6 +27,7 @@ import org.springframework.context.annotation.Import;
  * Regression for REVIEW.md Q1: the 32-character email limit also applies after normalisation.
  * U+0130 (capital I with dot above) lower-cases to two chars ("i" + U+0307) under Locale.ROOT.
  */
+@ActiveProfiles("test")
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @Import(TestcontainersConfiguration.class)
 class CustomerRegistrationNormalizedEmailLengthTests {

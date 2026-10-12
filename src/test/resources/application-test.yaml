@@ -1,0 +1,5 @@
+# Tests get their datasource from Testcontainers (@ServiceConnection); only schema handling is set here.
+spring:
+  jpa:
+    hibernate:
+      ddl-auto: create-drop

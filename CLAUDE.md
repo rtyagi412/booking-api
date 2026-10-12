@@ -26,11 +26,13 @@ Known gap: `README.md` currently contains only the customer-registration intent.
 - Small methods, descriptive names, no unused code.
 
 ## 4. PostgreSQL, JPA and migrations
-- Local DB via `docker-compose.yml`; datasource is overridable via `DB_*` environment variables (see `application.yaml`).
-- `ddl-auto: update` is for local development only. Keep `open-in-view: false`.
+- Configuration comes from environment variables `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USERNAME`, `DB_PASSWORD`. `application.yaml` has no defaults and uses `ddl-auto: validate`; the app will not start without them.
+- Profiles: `local` (`application-local.yaml`, dev defaults and `ddl-auto: update`, activate with `SPRING_PROFILES_ACTIVE=local`) and `test` (`src/test/resources/application-test.yaml`, `create-drop`; every `@SpringBootTest` class uses `@ActiveProfiles("test")` with Testcontainers `@ServiceConnection`).
+- `docker-compose.yml` reads the same `DB_*` variables from `.env` (copy `.env.example`); `DB_PASSWORD` is required there. Keep `open-in-view: false`.
 - Before production-oriented schema evolution, recommend Flyway with `ddl-auto: validate`. Do not add Flyway or change database configuration unless asked.
 - Enforce integrity in the database (unique constraints, not-null, lengths), and handle constraint violations explicitly (e.g. concurrent duplicates).
 - Use explicit `@Table`/`@Column` constraints; `@Transactional` on writing service methods.
+- Validate storage limits against the normalised value that will actually be persisted (e.g. trimmed, lower-cased), not the submitted text; normalisation can lengthen it.
 
 ## 5. Development workflow
 1. Inspect relevant code, `README.md` and the feature `intent.md` first.
@@ -48,7 +50,7 @@ Known gap: `README.md` currently contains only the customer-registration intent.
 ## 7. Security and secrets
 - Spring Security is on the classpath; explicitly permit any endpoint that must be public.
 - Hash passwords with a Spring Security `PasswordEncoder`; never store, log or return plain passwords or hashes.
-- Never hardcode or commit real secrets; use environment variables. Credentials in `docker-compose.yml`/`application.yaml` are local-dev defaults only.
+- Never hardcode or commit real secrets; use environment variables. Real values never go in `application*.yaml` or `docker-compose.yml`; `.env` is git-ignored, `.env.example` holds local sample values only. Local-dev defaults exist only in `application-local.yaml`.
 - Do not log personal data (emails, passwords) beyond what is necessary.
 
 ## 8. Repository boundaries and permissions
@@ -68,9 +70,9 @@ Run from the repository root.
 | All tests | `.\mvnw.cmd test` | `./mvnw test` |
 | One test class | `.\mvnw.cmd test "-Dtest=BookingApiApplicationTests"` | `./mvnw test -Dtest=BookingApiApplicationTests` |
 | Package | `.\mvnw.cmd package` | `./mvnw package` |
-| Run app (DB must be up) | `.\mvnw.cmd spring-boot:run` | `./mvnw spring-boot:run` |
+| Run app (DB must be up, `local` profile) | `$env:SPRING_PROFILES_ACTIVE="local"; .\mvnw.cmd spring-boot:run` | `SPRING_PROFILES_ACTIVE=local ./mvnw spring-boot:run` |
 
 Docker (same in both shells; Docker Desktop must be running):
-- Start DB: `docker compose up -d`
+- Start DB (needs `.env`, see `.env.example`): `docker compose up -d`
 - Status: `docker compose ps`
 - Stop DB (keeps data): `docker compose down`

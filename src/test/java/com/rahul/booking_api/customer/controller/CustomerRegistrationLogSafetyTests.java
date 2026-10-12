@@ -1,5 +1,6 @@
 package com.rahul.booking_api.customer.controller;
 
+import org.springframework.test.context.ActiveProfiles;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.doReturn;
@@ -39,6 +40,7 @@ import org.springframework.test.web.servlet.ResultActions;
  * disabled, files or other appenders, or the PostgreSQL container's own server log. Assertion messages name
  * the value's label only, never the value.
  */
+@ActiveProfiles("test")
 @SpringBootTest
 @AutoConfigureMockMvc(print = MockMvcPrint.NONE)
 @Import(TestcontainersConfiguration.class)

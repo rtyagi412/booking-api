@@ -1,5 +1,6 @@
 package com.rahul.booking_api.customer.repository;
 
+import org.springframework.test.context.ActiveProfiles;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -14,6 +15,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.dao.DataIntegrityViolationException;
 
+@ActiveProfiles("test")
 @SpringBootTest
 @Import(TestcontainersConfiguration.class)
 class AccountRepositoryTests {

@@ -1,5 +1,6 @@
 package com.rahul.booking_api.customer.service;
 
+import org.springframework.test.context.ActiveProfiles;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -31,6 +32,7 @@ import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
  * Deliberately not {@code @Transactional}: each service call runs in its own real transaction,
  * so failure paths exercise the service's rollback, and assertions afterwards use fresh transactions.
  */
+@ActiveProfiles("test")
 @SpringBootTest
 @Import(TestcontainersConfiguration.class)
 class CustomerServiceTests {

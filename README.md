@@ -1,60 +1,31 @@
-# Feature intent: Customer Registration
+# Movie Ticket Booking API
 
-Project context: see root `intent.md` (sections 2, 4.1, 5.1 and 6).
+Spring Boot REST backend for movie ticket booking (Maven, base package `com.rahul.booking_api`, PostgreSQL). `pom.xml` is the source of truth for the stack and versions; `CLAUDE.md` holds the development conventions and build/test commands.
 
-## 1. Objective
+## Features
 
-A new customer can register with a name, email and password. Registration always creates a Customer account.
+| Feature | Requirements | Status |
+|---|---|---|
+| Customer registration | [`features/customer-registration/intent.md`](features/customer-registration/intent.md) (design: `spec.md`, plan: `plan.md`, review: `REVIEW.md` in the same folder) | Implemented; review complete with deferred items (see `REVIEW.md`) |
 
-## 2. Out of scope
+Per-feature requirements and acceptance criteria live in `features/<feature>/intent.md`; they are not repeated here.
 
-Login, seeded accounts (Admin, Managers), password reset or change, password rules beyond non-empty, email verification, and any other role-based access.
+## Configuration and secrets
 
-## 3. Behaviour
+Configuration comes from environment variables; nothing secret is committed.
 
-**Input**
-- `name`, `email` and `password` are all required.
-- `name` and `email` must be non-empty after trimming surrounding whitespace, and at most 32 characters each.
-- `email` must have a valid email format.
-- `password` must be non-empty. There are no other password rules.
-- Duplicate names are allowed.
+| Variable | Meaning | Local sample |
+|---|---|---|
+| `DB_HOST` / `DB_PORT` | PostgreSQL host and port | `localhost` / `5436` |
+| `DB_NAME` | Database name | `booking` |
+| `DB_USERNAME` / `DB_PASSWORD` | Database credentials | `booking` / `booking` |
 
-**Role**
-- Registration always creates a Customer.
-- A role supplied in the request is ignored. It is neither honoured nor treated as an error.
+- `application.yaml` requires all `DB_*` variables (no defaults) and uses `ddl-auto: validate`.
+- Profile `local` (`application-local.yaml`) supplies the sample values above and `ddl-auto: update`. Activate it with `SPRING_PROFILES_ACTIVE=local`.
+- Tests use profile `test` and a Testcontainers PostgreSQL (Docker must be running); no `DB_*` variables are needed.
+- Local setup: copy `.env.example` to `.env` (git-ignored), run `docker compose up -d` (it fails if `DB_PASSWORD` is unset), then start the app with the `local` profile (commands in `CLAUDE.md` section 9).
+- Deployed environments must inject real `DB_*` values from the platform's secret store, never from files in the repository.
 
-**Email uniqueness**
-- Emails are unique across all accounts, matched case-insensitively and ignoring surrounding whitespace.
-- Seeded Admin and Manager emails count as used, so they cannot be registered as customers.
-- Emails are stored and compared in a normalised form (trimmed, case-insensitive).
-- A duplicate email is refused with the simple message: "email is already registered".
-- Invalid-input refusals are distinct from the duplicate-email refusal. Their exact wording is left for the specification.
+## Unresolved product documentation
 
-**Password handling**
-- The password is secured with a secure password hash before it is stored. The plain password is never stored.
-- Neither the password nor its hash is returned in any response.
-
-**Result**
-- On success, the response returns the new account's details except the password (for example id, name, email, role).
-- Registration does not log the customer in and issues no session or token.
-
-**Concurrency**
-- If two registrations with the same email arrive at the same moment, at most one account is created. The other gets the "email is already registered" refusal.
-
-## 4. Acceptance criteria
-
-1. A valid name, email and password creates a Customer account and returns its details without the password.
-2. The created account's role is always Customer, even if the request supplies another role.
-3. Registering an email already in use is refused with "email is already registered". This holds regardless of letter case or surrounding whitespace.
-4. A seeded Admin or Manager email cannot be registered.
-5. A missing, blank or over-32-character name or email is refused.
-6. An email with an invalid format is refused.
-7. An empty password is refused.
-8. Two customers may share the same name.
-9. The stored password is a secure hash that differs from the supplied password. Neither the password nor its hash is returned anywhere.
-10. Simultaneous registrations with the same email create at most one account.
-11. Registration does not log the customer in.
-
-## 5. Open items
-
-- None. The 32-character maximum is confirmed for both name and email.
+Project-level requirements are not yet written down. The customer-registration intent cites sections 2, 4.1, 5.1 and 6 of this README, but those sections have never existed in the repository. Their content (for example API path conventions, error format, role model) is **unresolved**: nothing is assumed, and anything depending on it is marked as proposed in the feature `spec.md`. The product owner has to supply these sections or confirm they never existed. See `features/customer-registration/REVIEW.md` §5.
