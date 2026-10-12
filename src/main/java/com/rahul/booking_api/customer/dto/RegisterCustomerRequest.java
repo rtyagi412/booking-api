@@ -10,7 +10,7 @@ public record RegisterCustomerRequest(
 		String name,
 
 		@NotBlank(message = "must not be blank")
-		@Size(max = 32, message = "must be at most 32 characters")
+		@MaxNormalizedLength(value = 32, message = "must be at most 32 characters")
 		@Email(message = "must be a valid email address")
 		String email,
 
