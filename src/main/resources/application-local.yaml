@@ -5,8 +5,6 @@ spring:
     username: ${DB_USERNAME:booking}
     password: ${DB_PASSWORD:booking}
   jpa:
-    hibernate:
-      ddl-auto: update
     properties:
       hibernate:
         format_sql: true

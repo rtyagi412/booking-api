@@ -1,5 +1,5 @@
-# Tests get their datasource from Testcontainers (@ServiceConnection); only schema handling is set here.
+# Tests get their datasource from Testcontainers (@ServiceConnection); the schema comes from Flyway migrations and Hibernate only validates it.
 spring:
   jpa:
     hibernate:
-      ddl-auto: create-drop
+      ddl-auto: validate

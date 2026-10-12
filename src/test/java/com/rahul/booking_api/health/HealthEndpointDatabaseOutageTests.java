@@ -27,6 +27,7 @@ import org.springframework.test.web.servlet.MockMvc;
 		"spring.datasource.password=outage",
 		"spring.datasource.hikari.initialization-fail-timeout=-1",
 		"spring.datasource.hikari.connection-timeout=250",
+		"spring.flyway.enabled=false",
 		"spring.jpa.hibernate.ddl-auto=none",
 		"spring.jpa.database-platform=org.hibernate.dialect.PostgreSQLDialect",
 		"spring.jpa.properties.hibernate.boot.allow_jdbc_metadata_access=false"

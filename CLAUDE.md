@@ -26,10 +26,11 @@ Known gap: `README.md` currently contains only the customer-registration intent.
 - Small methods, descriptive names, no unused code.
 
 ## 4. PostgreSQL, JPA and migrations
-- Configuration comes from environment variables `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USERNAME`, `DB_PASSWORD`. `application.yaml` has no defaults and uses `ddl-auto: validate`; the app will not start without them.
-- Profiles: `local` (`application-local.yaml`, dev defaults and `ddl-auto: update`, activate with `SPRING_PROFILES_ACTIVE=local`) and `test` (`src/test/resources/application-test.yaml`, `create-drop`; every `@SpringBootTest` class uses `@ActiveProfiles("test")` with Testcontainers `@ServiceConnection`).
+- Configuration comes from environment variables `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USERNAME`, `DB_PASSWORD`. `application.yaml` has no defaults and uses `ddl-auto: validate`; the app will not start without them. Hibernate never creates or alters schema in any profile.
+- Profiles: `local` (`application-local.yaml`, dev defaults, activate with `SPRING_PROFILES_ACTIVE=local`) and `test` (`src/test/resources/application-test.yaml`, schema comes from Flyway, Hibernate only validates; every `@SpringBootTest` class uses `@ActiveProfiles("test")` with Testcontainers `@ServiceConnection`).
 - `docker-compose.yml` reads the same `DB_*` variables from `.env` (copy `.env.example`); `DB_PASSWORD` is required there. Keep `open-in-view: false`.
-- Before production-oriented schema evolution, recommend Flyway with `ddl-auto: validate`. Do not add Flyway or change database configuration unless asked.
+- Schema changes are Flyway migrations in `src/main/resources/db/migration/` (`V<n>__snake_case.sql`, strictly increasing integers, runs at startup before Hibernate `validate`). Add the migration in the same change as the entity change; one logical change per file, explicit constraint/index names (`uk_`, `ix_`, `fk_`), no `IF NOT EXISTS`. Never edit an applied migration (checksum validation fails): add a new version instead. `V1` is the `accounts` baseline schema (including the `accounts_role_check` CHECK, which a new `Role` value must replace via a migration).
+- Never run `flyway repair`, enable `baseline-on-migrate` in committed config, or delete the database volume without explicit approval. A database that has tables but no `flyway_schema_history` fails to start by design; baselining it is a one-time, explicitly approved, env-scoped action (`SPRING_FLYWAY_BASELINE_ON_MIGRATE=true`, `SPRING_FLYWAY_BASELINE_VERSION=1`) after a verified backup. Keep backups outside the repository.
 - Enforce integrity in the database (unique constraints, not-null, lengths), and handle constraint violations explicitly (e.g. concurrent duplicates).
 - Use explicit `@Table`/`@Column` constraints; `@Transactional` on writing service methods.
 - Validate storage limits against the normalised value that will actually be persisted (e.g. trimmed, lower-cased), not the submitted text; normalisation can lengthen it.
@@ -77,6 +78,6 @@ Docker (same in both shells; Docker Desktop must be running):
 - Status: `docker compose ps`
 - Full stack (backend image + DB): `docker compose --profile app up -d --build`; logs: `docker compose logs -f backend`
 - Stop (keeps data): `docker compose --profile app down`. Never add `-v` without asking (deletes the DB volume).
-- Plain `docker compose up -d` starts only PostgreSQL. The backend container gets `DB_HOST=postgres`, `DB_PORT=5432` and `ddl-auto=update` from `docker-compose.yml` (local Compose only); it is published on `127.0.0.1:8080`.
+- Plain `docker compose up -d` starts only PostgreSQL. The backend container gets `DB_HOST=postgres`, and `DB_PORT=5432` from `docker-compose.yml`; Flyway migrates the schema at startup; it is published on `127.0.0.1:8080`.
 - After editing `docker-compose.yml` or `.env`, run `docker compose --profile app up -d` (recreates only changed services); `restart` does not apply config changes. Code or Dockerfile changes need `up -d --build backend`. PostgreSQL is published on `127.0.0.1:5436` only.
 - Health: only `GET /actuator/health`, `/actuator/health/liveness` (no DB) and `/actuator/health/readiness` (includes DB) are public, status only; all other Actuator paths stay protected. The backend container healthcheck uses readiness. Read-only smoke test: `.\scripts\smoke-test.ps1` (exit code 0 = pass).

@@ -21,10 +21,16 @@ Configuration comes from environment variables; nothing secret is committed.
 | `DB_USERNAME` / `DB_PASSWORD` | Database credentials | `booking` / `booking` |
 
 - `application.yaml` requires all `DB_*` variables (no defaults) and uses `ddl-auto: validate`.
-- Profile `local` (`application-local.yaml`) supplies the sample values above and `ddl-auto: update`. Activate it with `SPRING_PROFILES_ACTIVE=local`.
+- Profile `local` (`application-local.yaml`) supplies the sample values above. Activate it with `SPRING_PROFILES_ACTIVE=local`.
 - Tests use profile `test` and a Testcontainers PostgreSQL (Docker must be running); no `DB_*` variables are needed.
 - Local setup: copy `.env.example` to `.env` (git-ignored), run `docker compose up -d` (it fails if `DB_PASSWORD` is unset), then start the app with the `local` profile (commands in `CLAUDE.md` section 9).
 - Deployed environments must inject real `DB_*` values from the platform's secret store, never from files in the repository.
+
+## Database migrations (Flyway)
+
+The schema is managed only by versioned SQL migrations in `src/main/resources/db/migration/` (`V1__initial_schema.sql`, then `V2__...`). They run at application startup, and Hibernate only validates the result (`ddl-auto: validate`) in every profile. A new database gets all migrations automatically. Add a new `V<n>__description.sql` for every schema change and never edit one that has been applied. Check history with `docker exec booking-postgres psql -U booking -d booking -c "select version, description, type, success from flyway_schema_history"`.
+
+A database created before Flyway (tables but no `flyway_schema_history`) is refused at startup by design and needs a one-time, explicitly approved baseline at version 1 after a verified backup. See `CLAUDE.md` section 4.
 
 ## Running with Docker
 
@@ -43,7 +49,7 @@ Health checks: `GET /actuator/health/liveness` (process only) and `/actuator/hea
 .\scripts\smoke-test.ps1   # read-only; exit code 0 means all checks passed
 ```
 
-The image is a multi-stage build (Java 25, Maven wrapper) that runs as a non-root user and contains no credentials; the backend receives `DB_*` values at runtime. In Compose it reaches the database as `postgres:5432` and runs with `ddl-auto=update` because a fresh volume has no schema. This is for local use only; production schema management needs migrations.
+The image is a multi-stage build (Java 25, Maven wrapper) that runs as a non-root user and contains no credentials; the backend receives `DB_*` values at runtime. In Compose it reaches the database as `postgres:5432` and Flyway applies the schema migrations at startup.
 
 ## Unresolved product documentation
 

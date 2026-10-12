@@ -33,8 +33,6 @@ services:
       DB_NAME: ${DB_NAME:-booking}
       DB_USERNAME: ${DB_USERNAME:-booking}
       DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD must be set (copy .env.example to .env)}
-      # Local Compose only: a fresh volume has no schema and the base config uses validate.
-      SPRING_JPA_HIBERNATE_DDL_AUTO: update
     # The runtime image has no curl: probe readiness (200 only when the DB is reachable) over bash /dev/tcp.
     # Docker only reports the state; it does not restart the container when unhealthy.
     healthcheck:
