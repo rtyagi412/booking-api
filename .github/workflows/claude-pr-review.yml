@@ -1,0 +1,61 @@
+
+name: Claude PR Review
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    branches: [main]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  review:
+    # Initial setup: review same-repository PRs only
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Claude Code Review
+        uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+
+          prompt: |
+            REPO: ${{ github.repository }}
+            PR NUMBER: ${{ github.event.pull_request.number }}
+
+            Perform a read-only code review of this PR.
+
+            Read CLAUDE.md and REVIEW.md.
+            Read the relevant intent.md, spec.md,
+            and plan.md when applicable.
+
+            Review for:
+            1. Logic defects and regressions.
+            2. Authentication and authorization issues.
+            3. Data exposure and sensitive logging.
+            4. Concurrency and transaction safety.
+            5. Requirements and design compliance.
+            6. Missing important test coverage.
+
+            Classify findings as Important or Nit.
+            Include file, line and suggested fix.
+
+            Do not modify files, commit, push,
+            approve or merge this PR.
+
+            Publish a concise review summary.
+            If no actionable defects exist,
+            explicitly state that.
+
+          claude_args: |
+            --max-turns 10
+            --allowedTools "Read,Glob,Grep"
