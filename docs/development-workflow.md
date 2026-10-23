@@ -25,7 +25,7 @@ Database tests use Testcontainers PostgreSQL, so Docker Desktop must be running.
 | Compile | `.\mvnw.cmd compile` | `./mvnw compile` |
 | All tests | `.\mvnw.cmd test` | `./mvnw test` |
 
-CI runs `./mvnw -B -ntp verify`, so `verify` is the closest local match if you want to reproduce it. CI also runs the Git hook tests (`python -I .claude/hooks/test_protect_git.py`); run them locally if you changed anything under `.claude/hooks/`.
+CI runs `sh ./mvnw -B -ntp verify`, so `verify` (Git Bash: `./mvnw verify`) is the closest local match if you want to reproduce it. CI also runs the Git hook tests (`python -I .claude/hooks/test_protect_git.py`); run them locally if you changed anything under `.claude/hooks/`.
 
 Open a PR only when compile and tests pass. If a test fails or is skipped, say so in the PR description.
 
@@ -51,7 +51,7 @@ Then open a PR on GitHub with `main` as the base branch. The description should 
 - **Testing**: the Maven commands run and their results.
 - **Notes**: schema changes, new dependencies or config changes, if any.
 
-The `CI` workflow (`.github/workflows/ci.yml`) runs automatically on pull requests targeting `main`, and on pushes to `main` and manual dispatch. It runs the Git hook tests, then `./mvnw -B -ntp verify` on Ubuntu with Java 25. Check that the run passes and fix failures before asking for review.
+The `CI` workflow (`.github/workflows/ci.yml`) runs automatically on pull requests targeting `main`, and on pushes to `main` and manual dispatch. It runs the Git hook tests, then `sh ./mvnw -B -ntp verify` on Ubuntu with Java 25. Check that the run passes and fix failures before asking for review.
 
 ## 5. Code review and approval
 
