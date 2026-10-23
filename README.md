@@ -58,13 +58,3 @@ Login, seeded accounts (Admin, Managers), password reset or change, password rul
 ## 5. Open items
 
 - None. The 32-character maximum is confirmed for both name and email.
-
-## 6. GitHub contribution workflow
-
-All changes reach `main` through a pull request:
-
-1. **Feature branch** - create a branch from the latest `main` (for example `feature/<name>` or `docs/<name>`).
-2. **Pull request** - push the branch and open a pull request targeting `main`.
-3. **CI checks** - GitHub Actions builds and tests the change; all checks must pass.
-4. **Review** - at least one reviewer checks the change and requests updates if needed.
-5. **Merge** - once checks pass and review is approved, merge the pull request into `main`.
