@@ -32,31 +32,18 @@ jobs:
           prompt: |
             REPO: ${{ github.repository }}
             PR NUMBER: ${{ github.event.pull_request.number }}
-
-            Perform a read-only code review of this PR.
-
-            Read CLAUDE.md and REVIEW.md.
-            Read the relevant intent.md, spec.md,
-            and plan.md when applicable.
-
-            Review for:
-            1. Logic defects and regressions.
-            2. Authentication and authorization issues.
-            3. Data exposure and sensitive logging.
-            4. Concurrency and transaction safety.
-            5. Requirements and design compliance.
-            6. Missing important test coverage.
-
-            Classify findings as Important or Nit.
-            Include file, line and suggested fix.
-
-            Do not modify files, commit, push,
-            approve or merge this PR.
-
-            Publish a concise review summary.
-            If no actionable defects exist,
-            explicitly state that.
+          
+            Review this PR's changed files only.
+          
+            Check for bugs, security issues, and incorrect documentation.
+          
+            Post a short review comment on the PR with:
+              - Important findings, if any.
+              - Maximum 2 minor suggestions.
+              - "No issues found" if everything looks good.
+          
+            Do not modify files, commit, push, approve, or merge
 
           claude_args: |
-            --max-turns 10
-            --allowedTools "Read,Glob,Grep"
+            --max-turns 15
+            --allowedTools "Read,Glob,Grep,Bash(gh pr view:*),Bash(gh pr diff:*),Bash(gh pr comment:*)"
